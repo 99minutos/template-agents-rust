@@ -71,9 +71,12 @@ impl Orchestrator {
             })
             .collect();
 
-        self.agent
-            .chat(prompt, rig_history)
-            .await
-            .expect("Failed to chat with Orchestrator")
+        match self.agent.chat(prompt, rig_history).await {
+            Ok(response) => response,
+            Err(e) => {
+                tracing::error!("Orchestrator chat failed: {}", e);
+                "Lo siento, ocurrió un error procesando tu solicitud. Intenta de nuevo.".to_string()
+            }
+        }
     }
 }
