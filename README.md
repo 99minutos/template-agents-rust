@@ -130,4 +130,4 @@ En `analyst/mod.rs`:
 
 ## 📚 Recursos Adicionales
 
-- **Documentación del crate `rig`**: Para una comprensión profunda de los componentes y la API de Rig, consulta la documentación oficial en [docs.rs](https://docs.rs/rig/latest/rig/).
+- **Documentación del crate `rig`**: Para una comprensión profunda de los componentes y la API de Rig, consulta la documentación oficial en [docs.rs](https://docs.rs/rig-core/latest/rig/).
