@@ -6,14 +6,11 @@ use rig::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
-// ================================================================
-// 1. Definición de Argumentos (Input/Output)
-// ================================================================
+#[derive(Debug, thiserror::Error)]
+#[error("DamageSpecialist error: {0}")]
+pub struct DamageError(String);
 
-/// Argumentos que el Orquestador enviará a este especialista.
-/// Contiene la información necesaria para procesar un reporte de daño.
 #[derive(Deserialize, Serialize, JsonSchema)]
 pub struct DamageReportArgs {
     /// Nombre o identificador del artículo dañado.
@@ -22,58 +19,32 @@ pub struct DamageReportArgs {
     pub description_of_damage: String,
 }
 
-// ================================================================
-// 2. Definición de Errores
-// ================================================================
-
-/// Error personalizado para el especialista de daños.
-#[derive(Debug, thiserror::Error)]
-#[error("Error en DamageSpecialist: {0}")]
-pub struct DamageError(String);
-
-// ================================================================
-// 3. Estructura del Especialista
-// ================================================================
-
-/// Especialista en gestión de reportes de daños y garantías.
-///
-/// Este agente analiza reportes de productos dañados y determina
-/// si procede una devolución o reemplazo basándose en la descripción.
-///
-/// # Herramientas disponibles
-/// - `CostDatabase`: Consulta precios para estimar costos de reparación/reemplazo.
-#[derive(Clone)]
-pub struct DamageSpecialist<M: CompletionModel + Clone + Send + Sync + 'static> {
-    agent: Arc<Agent<M>>,
+#[derive(Serialize)]
+pub struct DamageResponse {
+    pub response: String,
 }
 
-impl<M: CompletionModel + Clone + Send + Sync + 'static> DamageSpecialist<M> {
-    /// Crea una nueva instancia del especialista de daños.
-    ///
-    /// # Argumentos
-    /// * `model` - El modelo de lenguaje a usar (inyectado por el Orquestador).
+pub struct DamageSpecialist<M: CompletionModel> {
+    pub agent: Agent<M>,
+}
+
+impl<M: CompletionModel> DamageSpecialist<M> {
     pub fn new(model: M) -> Self {
         let agent = AgentBuilder::new(model)
             .preamble(include_str!("system_prompt.md"))
             .tool(CostDatabase)
             .build();
 
-        Self {
-            agent: Arc::new(agent),
-        }
+        Self { agent }
     }
 }
 
-// ================================================================
-// 4. Implementación del Trait Tool (Para Rig)
-// ================================================================
-
-impl<M: CompletionModel + Clone + Send + Sync + 'static> Tool for DamageSpecialist<M> {
+impl<M: CompletionModel> Tool for DamageSpecialist<M> {
     const NAME: &'static str = "damage_specialist";
 
-    type Args = DamageReportArgs;
-    type Output = String;
     type Error = DamageError;
+    type Args = DamageReportArgs;
+    type Output = DamageResponse;
 
     async fn definition(&self, _prompt: String) -> rig::completion::ToolDefinition {
         rig::completion::ToolDefinition {
@@ -92,9 +63,12 @@ impl<M: CompletionModel + Clone + Send + Sync + 'static> Tool for DamageSpeciali
             args.item_name, args.description_of_damage
         );
 
-        self.agent
+        let response = self
+            .agent
             .prompt(&prompt)
             .await
-            .map_err(|e| DamageError(e.to_string()))
+            .map_err(|e| DamageError(e.to_string()))?;
+
+        Ok(DamageResponse { response })
     }
 }

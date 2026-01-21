@@ -1,9 +1,8 @@
 use super::specialized::{address::AddressSpecialist, damage::DamageSpecialist};
-use super::AnyModel;
 use crate::api::request::FileAttachment;
 use crate::infra::redis::{ChatMessage, Role};
 use rig::agent::{Agent, AgentBuilder};
-use rig::client::CompletionClient;
+use rig::client::{CompletionClient, ProviderClient};
 use rig::completion::{Chat, Message};
 use rig::message::{
     AssistantContent, Document, DocumentMediaType, DocumentSourceKind, ImageMediaType, UserContent,
@@ -12,19 +11,39 @@ use rig::providers::gemini;
 use rig::providers::gemini::completion::gemini_api_types::{
     AdditionalParameters, GenerationConfig,
 };
+
 use rig::OneOrMany;
 
 pub struct Orchestrator {
-    pub agent: Agent<AnyModel>,
+    pub agent: Agent<gemini::completion::CompletionModel>,
 }
 
+/// Orchestrator is a struct that manages the interaction between the user and the agent.
+///         OpenAI
+/// let client = openai::client::Client::from_env();
+///
+/// gpt-5-nano
+/// gpt-5-mini
+/// gpt-5
+/// gpt-5.1
+///
+///         Anthropic
+/// let client = anthropic::client::Client::from_env();
+/// claude-3-7-sonnet-latest
+/// claude-sonnet-4-0
+/// claude-opus-4-0
+///
+///         Google
+/// let client = google::client::Client::from_env();
+/// gemini-3-flash
+/// gemini-3-pro
+/// gemini-3-deep-think
+///
+///
 impl Orchestrator {
     pub fn new() -> Self {
-        let config = crate::envs::get();
-        let gemini_client = gemini::client::Client::new(&config.gemini_api_key);
-        let gemini_model = gemini_client.completion_model("gemini-2.5-flash");
-        let gemini_model = AnyModel::new(Box::new(gemini_model));
-
+        let client = gemini::client::Client::from_env();
+        let gemini_model = client.completion_model("gemini-3-flash");
         let address_tool = AddressSpecialist::new(gemini_model.clone());
         let damage_tool = DamageSpecialist::new(gemini_model.clone());
 
@@ -34,13 +53,13 @@ impl Orchestrator {
             candidate_count: Some(1),
             ..Default::default()
         };
-        let cfg = AdditionalParameters::default().with_config(gen_cfg);
+        let params = AdditionalParameters::default().with_config(gen_cfg);
 
-        let agent = AgentBuilder::new(gemini_model.clone())
+        let agent = AgentBuilder::new(gemini_model)
             .preamble(include_str!("system_prompt.md"))
             .tool(address_tool)
             .tool(damage_tool)
-            .additional_params(serde_json::to_value(cfg).unwrap())
+            .additional_params(serde_json::to_value(params).unwrap())
             .build();
 
         Self { agent }
